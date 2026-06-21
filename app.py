@@ -409,7 +409,7 @@ with aba1:
 
 with aba2:
 
-    # GRÁFICO 1
+    # GRÁFICO 3
     
     st.subheader("Comparação de Domicílios")
 
@@ -458,6 +458,105 @@ with aba2:
         fig,
         use_container_width=True
     )
+
+    # GRÁFICO 4
+    
+
+    st.subheader(
+        "Número de domicílios em risco de insegurança alimentar"
+    )
+
+    dados = dfn_estado
+    
+    nivel_recorte3 = st.selectbox(
+        "Escolha o nível de recorte social:",
+        ["Domicílios em risco de insegurança alimentar", "Domicílios em risco de insegurança alimentar com pessoas com deficiência", "Domicílios em risco de insegurança alimentar com pessoas em situação de rua", "Domicílios em risco de insegurança alimentar com pessoas de povo ou comunidade tradicional", "Domicílios em risco de insegurança alimentar com pessoas menores de 18 anos", "Domicílios em risco de insegurança alimentar com RF respondente do sexo feminino", "Domicílios em risco de insegurança alimentar com RF respondente do sexo masculino", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado pardo", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado branco", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado amarelo", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado preto", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado indígena"],
+        key="grafico_recorte3"
+    )
+
+    agrupado_risco = (
+        dados
+        .groupby("UF", as_index=False)
+        [nivel_recorte3]
+        .sum()
+    )
+
+    fig = px.bar(
+        agrupado_risco,
+        x="UF",
+        y=nivel_recorte3,
+        text=nivel_recorte3,
+        title=f"Número de domicílios em risco de insegurança alimentar por {nivel_agrupamento3}"
+    )
+
+    fig.update_traces(
+        textposition="outside"
+    )
+
+    fig.update_layout(
+        xaxis_title="UF",
+        yaxis_title="Quantidade de Domicilios"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    # GRÁFICO 5
+    
+    st.subheader("Percentual de domicílios em risco de insegurança alimentar")
+
+
+    nivel_recorte4 = st.selectbox(
+        "Escolha o nível de visualização de recorte social:",
+        ["Domicílios em risco de insegurança alimentar", "Domicílios em risco de insegurança alimentar com pessoas com deficiência", "Domicílios em risco de insegurança alimentar com pessoas em situação de rua", "Domicílios em risco de insegurança alimentar com pessoas de povo ou comunidade tradicional", "Domicílios em risco de insegurança alimentar com pessoas menores de 18 anos", "Domicílios em risco de insegurança alimentar com RF respondente do sexo feminino", "Domicílios em risco de insegurança alimentar com RF respondente do sexo masculino", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado pardo", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado branco", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado amarelo", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado preto", "Domicílios em risco de insegurança alimentar com RF respondente autodeclarado indígena"],
+        key="grafico_recorte4"
+    )
+
+    dados = dfn_estado
+
+    agrupado_cobertura4 = (
+        dados
+        .groupby("UF", as_index=False)
+        [
+            [
+                nivel_recorte4,
+                "Domicílios com a TRIA aplicada"
+            ]
+        ]
+        .sum()
+    )
+
+    agrupado_cobertura4["% de insegurança alimentar"] = (
+        agrupado_cobertura4[nivel_recorte4]
+        /
+        agrupado_cobertura4["Domicílios com a TRIA aplicada"]
+    )*100
+
+    
+    fig = px.bar(
+        agrupado_cobertura4,
+        x="UF",
+        y="% de insegurança alimentar",
+        title=f"% {nivel_recorte4} por Estado"
+    )
+
+    fig.update_traces(
+        texttemplate="%{y:.2f}%",
+        textposition="outside"
+    )
+
+    fig.update_layout(
+        xaxis_title="UF",
+        yaxis_title="Percentual de domicílios em risco de insegurança alimentar"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
     # TABELA
 
     st.subheader("Dados filtrados")
