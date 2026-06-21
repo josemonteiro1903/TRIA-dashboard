@@ -486,7 +486,7 @@ with aba2:
         x="UF",
         y=nivel_recorte3,
         text=nivel_recorte3,
-        title=f"Número de domicílios em risco de insegurança alimentar por {nivel_agrupamento3}"
+        title=f"Número de domicílios em risco de insegurança alimentar por Estado"
     )
 
     fig.update_traces(
