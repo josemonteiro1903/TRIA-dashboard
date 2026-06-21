@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# =========================
+
 # CONFIGURAÇÃO
-# =========================
 
 st.set_page_config(
     page_title="Dashboard TRIA",
@@ -13,15 +12,14 @@ st.set_page_config(
 
 st.title("📊 Dashboard - TRIA no estado do Pará")
 
-# =========================
+
 # LEITURA DOS DADOS
-# =========================
+
 
 df = pd.read_csv("data/TRIA_2026.csv")
+dfn = pd.read_csv("data/TRIA_Nacional_2026.csv")
 
-# =========================
 # ABAS
-# =========================
 
 aba1, aba2 = st.tabs(
     ["TRIA Estado do Pará", "TRIA Nacional"]
@@ -29,12 +27,16 @@ aba1, aba2 = st.tabs(
 
 with aba1:
 
-    # =========================
     # FILTROS
-    # =========================
 
     st.sidebar.header("Filtros")
 
+    estado = st.sidebar.multiselect(
+        "Selecione o(s) Estado(s)",
+        options=sorted(dfn["UF"].unique()),
+        default=sorted(dfn["UF"].unique())
+    )
+    
     macro = st.sidebar.multiselect(
         "Selecione a(s) Macro Região(ões)",
         options=sorted(df["Macro Região"].unique()),
@@ -67,9 +69,12 @@ with aba1:
         default=municipios_disponiveis
     )
 
-    # =========================
+    
     # DATAFRAMES POR NÍVEL
-    # =========================
+    
+    dfn_estado = dfn[
+        dfn["UF"].isin(estado)
+    ]
 
     df_macro = df[
         df["Macro Região"].isin(macro)
@@ -89,10 +94,9 @@ with aba1:
         (df["Município"].isin(municipios))
     ]
 
-    # =========================
+    
     # GRÁFICO 1
-    # =========================
-
+    
     st.subheader("Comparação de Domicílios")
 
     nivel_agrupamento = st.selectbox(
@@ -155,9 +159,9 @@ with aba1:
         use_container_width=True
     )
 
-    # =========================
+    
     # GRÁFICO 2
-    # =========================
+    
 
     st.subheader("Porcentagem de cobertura da TRIA")
 
@@ -216,9 +220,9 @@ with aba1:
         use_container_width=True
     )
 
-    # =========================
+    
     # GRÁFICO 3
-    # =========================
+    
 
     st.subheader(
         "Pessoas em domicílios em risco de insegurança alimentar"
@@ -270,9 +274,9 @@ with aba1:
         use_container_width=True
     )
 
-    # =========================
+    
     # GRÁFICO 4
-    # =========================
+    
 
     st.subheader(
         "Número de domicílios em risco de insegurança alimentar"
@@ -311,7 +315,7 @@ with aba1:
         x=nivel_agrupamento4,
         y=nivel_recorte,
         text=nivel_recorte,
-        title=f"Pessoas em domicílios em risco de insegurança alimentar por {nivel_agrupamento3}"
+        title=f"Número de domicílios em risco de insegurança alimentar por {nivel_agrupamento3}"
     )
 
     fig.update_traces(
@@ -328,9 +332,9 @@ with aba1:
         use_container_width=True
     )
 
-    # =========================
+    
     # GRÁFICO 5
-    # =========================
+    
     st.subheader("Percentual de domicílios em risco de insegurança alimentar")
 
     nivel_agrupamento5 = st.selectbox(
@@ -397,10 +401,64 @@ with aba1:
         use_container_width=True
     )
     
-    # =========================
+    
     # TABELA
-    # =========================
 
     st.subheader("Dados filtrados")
-
     st.dataframe(df_municipio)
+
+with aba2:
+
+    # GRÁFICO 1
+    
+    st.subheader("Comparação de Domicílios")
+
+    dados = dfn_estado
+
+    agrupadon = (
+        dados
+        .groupby("UF", as_index=False)
+        [
+            [
+                "Pessoas em domicílios em risco de insegurança alimentar"
+            ]
+        ]
+        .sum()
+    )
+
+    agrupadon_long = agrupadon.melt(
+        id_vars="UF",
+        value_vars=[
+            "Pessoas em domicílios em risco de insegurança alimentar"
+        ],
+        var_name="Tipo",
+        value_name="Quantidade"
+    )
+
+    fig = px.bar(
+        agrupadon_long,
+        x="UF",
+        y="Quantidade",
+        color="Tipo",
+        barmode="group",
+        text="Quantidade",
+        title=f"Pessoas em domicílios em risco de insegurança alimentar por Estado"
+    )
+
+    fig.update_traces(
+        textposition="outside"
+    )
+
+    fig.update_layout(
+        xaxis_title="UF",
+        yaxis_title="Quantidade de pessoas em domicílios em risco de insegurança alimentar"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+    # TABELA
+
+    st.subheader("Dados filtrados")
+    st.dataframe(dfn_estado)
