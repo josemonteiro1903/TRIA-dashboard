@@ -1,7 +1,30 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import unicodedata
 
+
+# Função para remover os acentos de um texto
+def remover_acentos(texto):
+    if not isinstance(texto, str):
+        return texto
+    # Normaliza o texto e remove os caracteres de acentuação
+    nfkd = unicodedata.normalize('NFKD', texto)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+def padronizar_municipio(nome):
+    """
+    Remove acentos, espaços extras, coloca em maiúsculas e
+    remove o sufixo ' (PA)' ou '(PA)'.
+    """
+    if not isinstance(nome, str):
+        return nome
+    nome = remover_acentos(nome)
+    nome = nome.strip().upper()
+    nome = nome.replace(" (PA)", "").replace("(PA)", "")
+    # Remove múltiplos espaços internos
+    nome = " ".join(nome.split())
+    return nome
 
 # CONFIGURAÇÃO
 
@@ -12,12 +35,147 @@ st.set_page_config(
 
 st.title("📊 Dashboard - TRIA no estado do Pará")
 
+# LEITURA E TRATAMENTO DE DADOS
 
-# LEITURA DOS DADOS
+# DATAFRAME DADOS IBGE NACIONAL
+df_ibge_nacional = pd.read_csv(
+    "data/IBGE.csv"
+)
+df_ibge_nacional['Municipio '] = df_ibge_nacional['Municipio '].apply(remover_acentos)
+df_ibge_nacional["Municipio "] = df_ibge_nacional["Municipio "].apply(padronizar_municipio)
+df_ibge_nacional = df_ibge_nacional.sort_values(by='Municipio ')
+df_ibge_nacional = df_ibge_nacional.dropna()
+df_ibge_nacional['Municipio '] = df_ibge_nacional['Municipio '].str.replace(r'\s*\([^)]*\)', '', regex=True).str.strip()
 
 
-df = pd.read_csv("data/TRIA_2026.csv")
-dfn = pd.read_csv("data/TRIA_Nacional_2026.csv")
+# DATAFRAME DADOS IBGE REGIONAL
+df_ibge_regional = pd.read_csv(
+    "data/IBGE.csv"
+)
+df_ibge_regional = df_ibge_regional[df_ibge_regional["Municipio "].str.endswith("(PA)")]
+df_ibge_regional['Municipio '] = df_ibge_regional['Municipio '].apply(remover_acentos)
+df_ibge_regional["Municipio "] = df_ibge_regional["Municipio "].apply(padronizar_municipio)
+df_ibge_regional = df_ibge_regional.sort_values(by='Municipio ')
+df_ibge_regional = df_ibge_regional.dropna()
+
+# DATAFRAME TRIA NACIONAL
+df_tria_nacional = pd.read_csv("data/TRIA.csv")
+df_tria_nacional['Município'] = df_tria_nacional['Município'].apply(remover_acentos)
+df_tria_nacional["Município"] = df_tria_nacional["Município"].apply(padronizar_municipio)
+df_tria_nacional = df_tria_nacional.sort_values(by='Município')
+
+# 1. Filtra as colunas que começam com '%' e têm tipo 'object'
+colunas_porcentagem = [
+    col for col in df_tria_nacional.columns
+    if col.startswith('%') and df_tria_nacional[col].dtype == 'object'
+]
+
+# 2. Aplica a substituição da vírgula por ponto e converte para float
+for col in colunas_porcentagem:
+    df_tria_nacional[col] = df_tria_nacional[col].astype(str).str.replace(',', '.', regex=False)
+    df_tria_nacional[col] = pd.to_numeric(df_tria_nacional[col], errors='coerce')
+
+
+# ------------------------------------------------------------
+# ADICIONA DOMICÍLIOS DO IBGE À TRIA
+# ------------------------------------------------------------
+
+# Cria uma chave padronizada para os dois DataFrames
+df_ibge_nacional["_municipio_key"] = (
+    df_ibge_nacional["Municipio "]
+    .apply(padronizar_municipio)
+)
+
+df_tria_nacional["_municipio_key"] = (
+    df_tria_nacional["Município"]
+    .apply(padronizar_municipio)
+)
+
+# Remove possíveis duplicados do IBGE
+df_ibge_nacional = (
+    df_ibge_nacional
+    .drop_duplicates(subset="_municipio_key")
+)
+
+# Mediana nacional de domicílios
+mediana_domicilios = df_ibge_nacional["Domicilios"].median()
+
+
+# Cria dicionário Municipio -> Domicilios
+mapa_domicilios = dict(
+    zip(
+        df_ibge_nacional["_municipio_key"],
+        df_ibge_nacional["Domicilios"]
+    )
+)
+
+# Faz a correspondência
+df_tria_nacional["Total domicílios*"] = (
+    df_tria_nacional["_municipio_key"]
+    .map(mapa_domicilios)
+)
+
+# Conta quantos não encontraram correspondência
+sem_correspondencia = (
+    df_tria_nacional["Total domicílios*"]
+    .isna()
+    .sum()
+)
+
+# Preenche com a mediana
+df_tria_nacional["Total domicílios*"] = (
+    df_tria_nacional["Total domicílios*"]
+    .fillna(mediana_domicilios)
+)
+
+
+df_tria_nacional = df_tria_nacional.dropna()
+df_tria_nacional = df_tria_nacional.reset_index(drop=True)
+df_tria_nacional = df_tria_nacional.drop_duplicates(subset=['IBGE'])
+
+# DATAFRAME TRIA REGIONAL
+df_tria_regional = pd.read_csv("data/TRIA.csv")
+df_tria_regional = df_tria_regional.dropna()
+df_tria_regional = df_tria_regional[df_tria_regional['UF'] == 'PA']
+df_tria_regional['Município'] = df_tria_regional['Município'].apply(remover_acentos)
+df_tria_regional["Município"] = df_tria_regional["Município"].apply(padronizar_municipio)
+df_tria_regional = df_tria_regional.sort_values(by='Município')
+
+# 1. Filtra as colunas que começam com '%' e têm tipo 'object'
+colunas_porcentagem = [
+    col for col in df_tria_regional.columns
+    if col.startswith('%') and df_tria_regional[col].dtype == 'object'
+]
+
+# 2. Aplica a substituição da vírgula por ponto e converte para float
+for col in colunas_porcentagem:
+    df_tria_regional[col] = df_tria_regional[col].astype(str).str.replace(',', '.', regex=False)
+    df_tria_regional[col] = pd.to_numeric(df_tria_regional[col], errors='coerce')
+
+# Suponha que seu CSV tenha colunas: 'Município', 'Macro Região', 'Micro Região'
+df_regioes = pd.read_csv("data/Dicionario.csv")
+
+# Padronize o nome do município no CSV auxiliar
+df_regioes["Município"] = df_regioes["Município"].apply(padronizar_municipio)
+
+# Merge para adicionar as regiões
+df_tria_regional = df_tria_regional.merge(
+    df_regioes[["Município", "Macro Região", "Micro Região"]],
+    on="Município",
+    how="left"
+)
+
+# Verifica novamente se houve perda
+sem_regiao = df_tria_regional["Macro Região"].isna().sum()
+if sem_regiao > 0:
+    st.warning(f"⚠️ {sem_regiao} município(s) não encontraram correspondência no arquivo de regiões.")
+
+# Agora df_tria_regional está completo com domicílios e regiões
+
+df_ibge_regional = df_ibge_regional.reset_index(drop=True)
+df_tria_regional = df_tria_regional.reset_index(drop=True)
+df_tria_regional["Total domicílios*"] = df_ibge_regional["Domicilios"]
+df_tria_regional = df_tria_regional.dropna()
 
 # ABAS
 
@@ -26,26 +184,25 @@ aba1, aba2 = st.tabs(
 )
 
 with aba1:
-
+    
     # FILTROS
-
+ 
     st.sidebar.header("Filtros")
-
     estado = st.sidebar.multiselect(
         "Selecione o(s) Estado(s)",
-        options=sorted(dfn["UF"].unique()),
-        default=sorted(dfn["UF"].unique())
+        options=sorted(df_tria_nacional["UF"].unique()),
+        default=sorted(df_tria_nacional["UF"].unique())
     )
     
     macro = st.sidebar.multiselect(
         "Selecione a(s) Macro Região(ões)",
-        options=sorted(df["Macro Região"].unique()),
-        default=sorted(df["Macro Região"].unique())
+        options=sorted(df_tria_regional["Macro Região"].unique()),
+        default=sorted(df_tria_regional["Macro Região"].unique())
     )
 
     micro_disponiveis = sorted(
-        df[
-            df["Macro Região"].isin(macro)
+        df_tria_regional[
+            df_tria_regional["Macro Região"].isin(macro)
         ]["Micro Região"].unique()
     )
 
@@ -56,10 +213,10 @@ with aba1:
     )
 
     municipios_disponiveis = sorted(
-        df[
-            (df["Macro Região"].isin(macro))
+        df_tria_regional[
+            (df_tria_regional["Macro Região"].isin(macro))
             &
-            (df["Micro Região"].isin(micro))
+            (df_tria_regional["Micro Região"].isin(micro))
         ]["Município"].unique()
     )
 
@@ -72,33 +229,30 @@ with aba1:
     
     # DATAFRAMES POR NÍVEL
     
-    dfn_estado = dfn[
-        dfn["UF"].isin(estado)
+    dfn_estado = df_tria_nacional[
+        df_tria_nacional["UF"].isin(estado)
     ]
 
-    df_macro = df[
-        df["Macro Região"].isin(macro)
+    df_macro = df_tria_regional[
+        df_tria_regional["Macro Região"].isin(macro)
     ]
 
-    df_micro = df[
-        (df["Macro Região"].isin(macro))
+    df_micro = df_tria_regional[
+        (df_tria_regional["Macro Região"].isin(macro))
         &
-        (df["Micro Região"].isin(micro))
+        (df_tria_regional["Micro Região"].isin(micro))
     ]
 
-    df_municipio = df[
-        (df["Macro Região"].isin(macro))
+    df_municipio = df_tria_regional[
+        (df_tria_regional["Macro Região"].isin(macro))
         &
-        (df["Micro Região"].isin(micro))
+        (df_tria_regional["Micro Região"].isin(micro))
         &
-        (df["Município"].isin(municipios))
+        (df_tria_regional["Município"].isin(municipios))
     ]
-
     
     # GRÁFICO 1
-    
     st.subheader("Comparação de Domicílios")
-
     nivel_agrupamento = st.selectbox(
         "Escolha o nível de visualização:",
         ["Macro Região", "Micro Região", "Município"]
@@ -409,6 +563,101 @@ with aba1:
 
 with aba2:
 
+    # GRÁFICO 1
+    st.subheader("Comparação de Domicílios")
+    dados = dfn_estado
+    agrupado = (
+        dados
+        .groupby("UF", as_index=False)
+        [
+            [
+                "Total domicílios*",
+                "Domicílios com a TRIA aplicada"
+            ]
+        ]
+        .sum()
+    )
+
+    agrupado_long = agrupado.melt(
+        id_vars="UF",
+        value_vars=[
+            "Total domicílios*",
+            "Domicílios com a TRIA aplicada"
+        ],
+        var_name="Tipo",
+        value_name="Quantidade"
+    )
+
+    fig = px.bar(
+        agrupado_long,
+        x="UF",
+        y="Quantidade",
+        color="Tipo",
+        barmode="group",
+        text="Quantidade",
+        title=f"Total de domicílios x Domicílios com TRIA aplicada por {nivel_agrupamento}"
+    )
+
+    fig.update_traces(
+        textposition="outside"
+    )
+
+    fig.update_layout(
+        xaxis_title="UF",
+        yaxis_title="Quantidade de domicílios"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    # GRÁFICO 2
+    
+
+    st.subheader("Porcentagem de cobertura da TRIA")
+
+    dados = dfn_estado
+
+    agrupado_cobertura = (
+        dados
+        .groupby("UF", as_index=False)
+        [
+            [
+                "Total domicílios*",
+                "Domicílios com a TRIA aplicada"
+            ]
+        ]
+        .sum()
+    )
+
+    agrupado_cobertura["% de cobertura da TRIA"] = (
+        agrupado_cobertura["Domicílios com a TRIA aplicada"]
+        /
+        agrupado_cobertura["Total domicílios*"]
+    ) * 100
+
+    fig = px.bar(
+        agrupado_cobertura,
+        x="UF",
+        y="% de cobertura da TRIA",
+        title=f"Porcentagem de cobertura da TRIA por {nivel_agrupamento2}"
+    )
+
+    fig.update_traces(
+        texttemplate="%{y:.2f}%",
+        textposition="outside"
+    )
+
+    fig.update_layout(
+        xaxis_title="UF",
+        yaxis_title="Cobertura da TRIA (%)"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
     # GRÁFICO 3
     
     st.subheader("Comparação de Domicílios")
