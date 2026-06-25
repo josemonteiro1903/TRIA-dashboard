@@ -41,22 +41,22 @@ st.title("📊 Dashboard - TRIA no estado do Pará")
 df_ibge_nacional = pd.read_csv(
     "data/IBGE.csv"
 )
-df_ibge_nacional['Municipio '] = df_ibge_nacional['Municipio '].apply(remover_acentos)
-df_ibge_nacional["Municipio "] = df_ibge_nacional["Municipio "].apply(padronizar_municipio)
-df_ibge_nacional = df_ibge_nacional.sort_values(by='Municipio ')
+df_ibge_nacional['Municípios'] = df_ibge_nacional['Municípios'].apply(remover_acentos)
+df_ibge_nacional["Municípios"] = df_ibge_nacional["Municípios"].apply(padronizar_municipio)
+df_ibge_nacional = df_ibge_nacional.sort_values(by='Municípios')
 df_ibge_nacional = df_ibge_nacional.dropna()
-df_ibge_nacional['Municipio '] = df_ibge_nacional['Municipio '].str.replace(r'\s*\([^)]*\)', '', regex=True).str.strip()
-
+df_ibge_nacional['Municípios'] = df_ibge_nacional['Municípios'].str.replace(r'\s*\([^)]*\)', '', regex=True).str.strip()
 
 # DATAFRAME DADOS IBGE REGIONAL
 df_ibge_regional = pd.read_csv(
     "data/IBGE.csv"
 )
-df_ibge_regional = df_ibge_regional[df_ibge_regional["Municipio "].str.endswith("(PA)")]
-df_ibge_regional['Municipio '] = df_ibge_regional['Municipio '].apply(remover_acentos)
-df_ibge_regional["Municipio "] = df_ibge_regional["Municipio "].apply(padronizar_municipio)
-df_ibge_regional = df_ibge_regional.sort_values(by='Municipio ')
+df_ibge_regional = df_ibge_regional[df_ibge_regional['UF'] == 'PA']
+df_ibge_regional['Municípios'] = df_ibge_regional['Municípios'].apply(remover_acentos)
+df_ibge_regional["Municípios"] = df_ibge_regional["Municípios"].apply(padronizar_municipio)
+df_ibge_regional = df_ibge_regional.sort_values(by='Municípios')
 df_ibge_regional = df_ibge_regional.dropna()
+df_ibge_regional = df_ibge_regional.reset_index(drop=True)
 
 # DATAFRAME TRIA NACIONAL
 df_tria_nacional = pd.read_csv("data/TRIA.csv")
@@ -80,54 +80,64 @@ for col in colunas_porcentagem:
 # ADICIONA DOMICÍLIOS DO IBGE À TRIA
 # ------------------------------------------------------------
 
-# Cria uma chave padronizada para os dois DataFrames
-df_ibge_nacional["_municipio_key"] = (
-    df_ibge_nacional["Municipio "]
-    .apply(padronizar_municipio)
+# Cria chave composta MUNICÍPIO + UF no IBGE
+df_ibge_nacional["_chave"] = (
+    df_ibge_nacional["Municípios"].apply(padronizar_municipio)
+    + "|"
+    + df_ibge_nacional["UF"].astype(str).str.upper().str.strip()
 )
 
-df_tria_nacional["_municipio_key"] = (
-    df_tria_nacional["Município"]
-    .apply(padronizar_municipio)
+# Cria chave composta MUNICÍPIO + UF na TRIA
+df_tria_nacional["_chave"] = (
+    df_tria_nacional["Município"].apply(padronizar_municipio)
+    + "|"
+    + df_tria_nacional["UF"].astype(str).str.upper().str.strip()
 )
 
-# Remove possíveis duplicados do IBGE
-df_ibge_nacional = (
-    df_ibge_nacional
-    .drop_duplicates(subset="_municipio_key")
-)
+# Remove duplicados do IBGE
+df_ibge_nacional = df_ibge_nacional.drop_duplicates(subset="_chave")
 
-# Mediana nacional de domicílios
-mediana_domicilios = df_ibge_nacional["Domicilios"].median()
+# Calcula mediana nacional
+mediana_domicilios = df_ibge_nacional["domicílios"].median()
 
-
-# Cria dicionário Municipio -> Domicilios
+# Cria mapa CHAVE -> DOMICÍLIOS
 mapa_domicilios = dict(
     zip(
-        df_ibge_nacional["_municipio_key"],
-        df_ibge_nacional["Domicilios"]
+        df_ibge_nacional["_chave"],
+        df_ibge_nacional["domicílios"]
     )
 )
 
 # Faz a correspondência
 df_tria_nacional["Total domicílios*"] = (
-    df_tria_nacional["_municipio_key"]
+    df_tria_nacional["_chave"]
     .map(mapa_domicilios)
 )
 
-# Conta quantos não encontraram correspondência
+# Quantos ficaram sem correspondência
 sem_correspondencia = (
     df_tria_nacional["Total domicílios*"]
     .isna()
     .sum()
 )
 
-# Preenche com a mediana
+# Preenche faltantes com a mediana
 df_tria_nacional["Total domicílios*"] = (
     df_tria_nacional["Total domicílios*"]
     .fillna(mediana_domicilios)
 )
 
+# Mensagem de diagnóstico
+if sem_correspondencia > 0:
+    st.warning(
+        f"⚠️ {sem_correspondencia} município(s) não encontraram "
+        f"correspondência por Município + UF e receberam a mediana "
+        f"de {mediana_domicilios:,.0f} domicílios."
+    )
+
+# Remove chave auxiliar
+df_tria_nacional.drop(columns=["_chave"], inplace=True)
+df_ibge_nacional.drop(columns=["_chave"], inplace=True)
 
 df_tria_nacional = df_tria_nacional.dropna()
 df_tria_nacional = df_tria_nacional.reset_index(drop=True)
@@ -153,7 +163,7 @@ for col in colunas_porcentagem:
     df_tria_regional[col] = pd.to_numeric(df_tria_regional[col], errors='coerce')
 
 # Suponha que seu CSV tenha colunas: 'Município', 'Macro Região', 'Micro Região'
-df_regioes = pd.read_csv("data/Dicionario.csv")
+df_regioes = pd.read_csv("data/Dicionario_TRIA.csv")
 
 # Padronize o nome do município no CSV auxiliar
 df_regioes["Município"] = df_regioes["Município"].apply(padronizar_municipio)
@@ -172,9 +182,8 @@ if sem_regiao > 0:
 
 # Agora df_tria_regional está completo com domicílios e regiões
 
-df_ibge_regional = df_ibge_regional.reset_index(drop=True)
 df_tria_regional = df_tria_regional.reset_index(drop=True)
-df_tria_regional["Total domicílios*"] = df_ibge_regional["Domicilios"]
+df_tria_regional["Total domicílios*"] = df_ibge_regional["domicílios"]
 df_tria_regional = df_tria_regional.dropna()
 
 # ABAS
@@ -186,7 +195,9 @@ aba1, aba2 = st.tabs(
 with aba1:
     
     # FILTROS
- 
+    st.dataframe(df_ibge_regional)
+    st.dataframe(df_tria_regional)
+    
     st.sidebar.header("Filtros")
     estado = st.sidebar.multiselect(
         "Selecione o(s) Estado(s)",
