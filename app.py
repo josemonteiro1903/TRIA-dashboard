@@ -195,8 +195,6 @@ aba1, aba2 = st.tabs(
 with aba1:
     
     # FILTROS
-    st.dataframe(df_ibge_regional)
-    st.dataframe(df_tria_regional)
     
     st.sidebar.header("Filtros")
     estado = st.sidebar.multiselect(
