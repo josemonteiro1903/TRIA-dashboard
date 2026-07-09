@@ -604,7 +604,7 @@ with aba2:
         color="Tipo",
         barmode="group",
         text="Quantidade",
-        title=f"Total de domicílios x Domicílios com TRIA aplicada por {nivel_agrupamento}"
+        title=f"Total de domicílios x Domicílios com TRIA aplicada por Estado"
     )
 
     fig.update_traces(
