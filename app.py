@@ -650,7 +650,7 @@ with aba2:
         agrupado_cobertura,
         x="UF",
         y="% de cobertura da TRIA",
-        title=f"Porcentagem de cobertura da TRIA por {nivel_agrupamento2}"
+        title=f"Porcentagem de cobertura da TRIA por Estado"
     )
 
     fig.update_traces(
