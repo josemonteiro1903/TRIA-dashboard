@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import unicodedata
+import requests
+import zipfile
+from io import BytesIO
 
 
 # Função para remover os acentos de um texto
@@ -59,7 +62,29 @@ df_ibge_regional = df_ibge_regional.dropna()
 df_ibge_regional = df_ibge_regional.reset_index(drop=True)
 
 # DATAFRAME TRIA NACIONAL
-df_tria_nacional = pd.read_csv("data/TRIA.csv")
+
+@st.cache_data(ttl=86400)
+def carregar_tria():
+
+    url = "https://egestorab.saude.gov.br/image/?file=20260608_O_TABELABRASIL_511180891588764537.zip"
+
+    response = requests.get(url)
+    response.raise_for_status()
+
+    with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+
+        # procura automaticamente o xlsx
+        nome_excel = next(
+            arquivo for arquivo in zip_file.namelist()
+            if arquivo.lower().endswith(".xlsx")
+        )
+
+        with zip_file.open(nome_excel) as arquivo_excel:
+            df = pd.read_excel(arquivo_excel)
+
+    return df
+
+df_tria_nacional = carregar_tria()
 df_tria_nacional['Município'] = df_tria_nacional['Município'].apply(remover_acentos)
 df_tria_nacional["Município"] = df_tria_nacional["Município"].apply(padronizar_municipio)
 df_tria_nacional = df_tria_nacional.sort_values(by='Município')
@@ -144,7 +169,28 @@ df_tria_nacional = df_tria_nacional.reset_index(drop=True)
 df_tria_nacional = df_tria_nacional.drop_duplicates(subset=['IBGE'])
 
 # DATAFRAME TRIA REGIONAL
-df_tria_regional = pd.read_csv("data/TRIA.csv")
+@st.cache_data(ttl=86400)
+def carregar_tria():
+
+    url = "https://egestorab.saude.gov.br/image/?file=20260608_O_TABELABRASIL_511180891588764537.zip"
+
+    response = requests.get(url)
+    response.raise_for_status()
+
+    with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+
+        # procura automaticamente o xlsx
+        nome_excel = next(
+            arquivo for arquivo in zip_file.namelist()
+            if arquivo.lower().endswith(".xlsx")
+        )
+
+        with zip_file.open(nome_excel) as arquivo_excel:
+            df = pd.read_excel(arquivo_excel)
+
+    return df
+
+df_tria_regional = carregar_tria()
 df_tria_regional = df_tria_regional.dropna()
 df_tria_regional = df_tria_regional[df_tria_regional['UF'] == 'PA']
 df_tria_regional['Município'] = df_tria_regional['Município'].apply(remover_acentos)
@@ -322,7 +368,7 @@ with aba1:
         use_container_width=True
     )
 
-    
+    st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
     # GRÁFICO 2
     
 
@@ -382,7 +428,7 @@ with aba1:
         fig,
         use_container_width=True
     )
-
+    st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
     
     # GRÁFICO 3
     
@@ -620,7 +666,8 @@ with aba2:
         fig,
         use_container_width=True
     )
-
+    
+    st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
     # GRÁFICO 2
     
 
@@ -667,6 +714,7 @@ with aba2:
         fig,
         use_container_width=True
     )
+    st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
     # GRÁFICO 3
     
     st.subheader("Comparação de Domicílios")
