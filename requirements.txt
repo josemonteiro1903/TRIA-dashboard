@@ -2,4 +2,8 @@ streamlit
 pandas
 plotly
 requests
+<<<<<<< HEAD
 openpyxl
+=======
+openpyxl
+>>>>>>> 326d8f6a733130822fc08606842673278f06d99b
