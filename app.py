@@ -29,7 +29,7 @@ def padronizar_municipio(nome):
     nome = " ".join(nome.split())
     return nome
 
-# CONFIGURAÇÃO
+# Configuração
 
 st.set_page_config(
     page_title="Dashboard TRIA",
@@ -38,9 +38,9 @@ st.set_page_config(
 
 st.title("📊 Dashboard - TRIA no estado do Pará")
 
-# LEITURA E TRATAMENTO DE DADOS
+# Leitura e tratamento de dados
 
-# DATAFRAME DADOS IBGE NACIONAL
+# Data frame IBGE nacional
 df_ibge_nacional = pd.read_csv(
     "data/IBGE.csv"
 )
@@ -50,7 +50,7 @@ df_ibge_nacional = df_ibge_nacional.sort_values(by='Municípios')
 df_ibge_nacional = df_ibge_nacional.dropna()
 df_ibge_nacional['Municípios'] = df_ibge_nacional['Municípios'].str.replace(r'\s*\([^)]*\)', '', regex=True).str.strip()
 
-# DATAFRAME DADOS IBGE REGIONAL
+# Data frame IBGE regional
 df_ibge_regional = pd.read_csv(
     "data/IBGE.csv"
 )
@@ -61,25 +61,63 @@ df_ibge_regional = df_ibge_regional.sort_values(by='Municípios')
 df_ibge_regional = df_ibge_regional.dropna()
 df_ibge_regional = df_ibge_regional.reset_index(drop=True)
 
-# DATAFRAME TRIA NACIONAL
+# Data frame TRIA nacional
 
 @st.cache_data(ttl=86400)
 def carregar_tria():
 
-    url = "https://egestorab.saude.gov.br/image/?file=20260608_O_TABELABRASIL_511180891588764537.zip"
+    # API utilizada pelo próprio site do TRIA
+    api_url = "https://relatorioaps-prd.saude.gov.br/arquivo/links/tria"
 
-    response = requests.get(url)
+    # Consulta a API
+    response = requests.get(
+        api_url,
+        timeout=30
+    )
+
     response.raise_for_status()
 
-    with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+    # Converte a resposta para JSON
+    dados = response.json()
 
-        # procura automaticamente o xlsx
-        nome_excel = next(
-            arquivo for arquivo in zip_file.namelist()
+    # Pega o arquivo nacional do TRIA
+    url = dados["linkPanoramaBrasil"]
+
+    print("URL do TRIA encontrada:", url)
+
+    # Baixa o ZIP
+    response_zip = requests.get(
+        url,
+        timeout=60
+    )
+
+    response_zip.raise_for_status()
+
+    # Abre o ZIP diretamente na memória
+    with zipfile.ZipFile(
+        BytesIO(response_zip.content)
+    ) as zip_file:
+
+        # Procura o arquivo Excel
+        arquivos_excel = [
+            arquivo
+            for arquivo in zip_file.namelist()
             if arquivo.lower().endswith(".xlsx")
-        )
+        ]
 
+        if not arquivos_excel:
+            raise Exception(
+                "O arquivo ZIP não contém nenhuma planilha XLSX."
+            )
+
+        # Pega a primeira planilha
+        nome_excel = arquivos_excel[0]
+
+        print("Planilha encontrada:", nome_excel)
+
+        # Abre a planilha
         with zip_file.open(nome_excel) as arquivo_excel:
+
             df = pd.read_excel(arquivo_excel)
 
     return df
@@ -89,21 +127,18 @@ df_tria_nacional['Município'] = df_tria_nacional['Município'].apply(remover_ac
 df_tria_nacional["Município"] = df_tria_nacional["Município"].apply(padronizar_municipio)
 df_tria_nacional = df_tria_nacional.sort_values(by='Município')
 
-# 1. Filtra as colunas que começam com '%' e têm tipo 'object'
+# Filtra as colunas que começam com '%' e têm tipo 'object'
 colunas_porcentagem = [
     col for col in df_tria_nacional.columns
     if col.startswith('%') and df_tria_nacional[col].dtype == 'object'
 ]
 
-# 2. Aplica a substituição da vírgula por ponto e converte para float
+# Aplica a substituição da vírgula por ponto e converte para float
 for col in colunas_porcentagem:
     df_tria_nacional[col] = df_tria_nacional[col].astype(str).str.replace(',', '.', regex=False)
     df_tria_nacional[col] = pd.to_numeric(df_tria_nacional[col], errors='coerce')
 
-
-# ------------------------------------------------------------
-# ADICIONA DOMICÍLIOS DO IBGE À TRIA
-# ------------------------------------------------------------
+# Adicionar domicilios do IBGE a TRIA
 
 # Cria chave composta MUNICÍPIO + UF no IBGE
 df_ibge_nacional["_chave"] = (
@@ -168,27 +203,7 @@ df_tria_nacional = df_tria_nacional.dropna()
 df_tria_nacional = df_tria_nacional.reset_index(drop=True)
 df_tria_nacional = df_tria_nacional.drop_duplicates(subset=['IBGE'])
 
-# DATAFRAME TRIA REGIONAL
-@st.cache_data(ttl=86400)
-def carregar_tria():
-
-    url = "https://egestorab.saude.gov.br/image/?file=20260608_O_TABELABRASIL_511180891588764537.zip"
-
-    response = requests.get(url)
-    response.raise_for_status()
-
-    with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
-
-        # procura automaticamente o xlsx
-        nome_excel = next(
-            arquivo for arquivo in zip_file.namelist()
-            if arquivo.lower().endswith(".xlsx")
-        )
-
-        with zip_file.open(nome_excel) as arquivo_excel:
-            df = pd.read_excel(arquivo_excel)
-
-    return df
+# # Data frame TRIA regional
 
 df_tria_regional = carregar_tria()
 df_tria_regional = df_tria_regional.dropna()
@@ -197,13 +212,13 @@ df_tria_regional['Município'] = df_tria_regional['Município'].apply(remover_ac
 df_tria_regional["Município"] = df_tria_regional["Município"].apply(padronizar_municipio)
 df_tria_regional = df_tria_regional.sort_values(by='Município')
 
-# 1. Filtra as colunas que começam com '%' e têm tipo 'object'
+# Filtra as colunas que começam com '%' e têm tipo 'object'
 colunas_porcentagem = [
     col for col in df_tria_regional.columns
     if col.startswith('%') and df_tria_regional[col].dtype == 'object'
 ]
 
-# 2. Aplica a substituição da vírgula por ponto e converte para float
+# Aplica a substituição da vírgula por ponto e converte para float
 for col in colunas_porcentagem:
     df_tria_regional[col] = df_tria_regional[col].astype(str).str.replace(',', '.', regex=False)
     df_tria_regional[col] = pd.to_numeric(df_tria_regional[col], errors='coerce')
@@ -232,7 +247,9 @@ df_tria_regional = df_tria_regional.reset_index(drop=True)
 df_tria_regional["Total domicílios*"] = df_ibge_regional["domicílios"]
 df_tria_regional = df_tria_regional.dropna()
 
-# ABAS
+# Fim do tratamento de dados
+
+# Abas
 
 aba1, aba2 = st.tabs(
     ["TRIA Estado do Pará", "TRIA Nacional"]
@@ -240,7 +257,7 @@ aba1, aba2 = st.tabs(
 
 with aba1:
     
-    # FILTROS
+    # Filtros
     
     st.sidebar.header("Filtros")
     estado = st.sidebar.multiselect(
@@ -281,12 +298,7 @@ with aba1:
         default=municipios_disponiveis
     )
 
-    
-    # DATAFRAMES POR NÍVEL
-    
-    dfn_estado = df_tria_nacional[
-        df_tria_nacional["UF"].isin(estado)
-    ]
+    # Dataframes por nível
 
     df_macro = df_tria_regional[
         df_tria_regional["Macro Região"].isin(macro)
@@ -306,7 +318,7 @@ with aba1:
         (df_tria_regional["Município"].isin(municipios))
     ]
     
-    # GRÁFICO 1
+    # Gráfico 1
     st.subheader("Comparação de Domicílios")
     nivel_agrupamento = st.selectbox(
         "Escolha o nível de visualização:",
@@ -369,8 +381,8 @@ with aba1:
     )
 
     st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
-    # GRÁFICO 2
-    
+
+    # Gráfico 2
 
     st.subheader("Porcentagem de cobertura da TRIA")
 
@@ -430,8 +442,7 @@ with aba1:
     )
     st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
     
-    # GRÁFICO 3
-    
+    # Gráfico 3
 
     st.subheader(
         "Pessoas em domicílios em risco de insegurança alimentar"
@@ -482,11 +493,9 @@ with aba1:
         fig,
         use_container_width=True
     )
-
     
-    # GRÁFICO 4
+    # Gráfico 4
     
-
     st.subheader(
         "Número de domicílios em risco de insegurança alimentar"
     )
@@ -541,8 +550,7 @@ with aba1:
         use_container_width=True
     )
 
-    
-    # GRÁFICO 5
+    # Gráfico 5
     
     st.subheader("Percentual de domicílios em risco de insegurança alimentar")
 
@@ -611,14 +619,20 @@ with aba1:
     )
     
     
-    # TABELA
+    # Tabela
 
     st.subheader("Dados filtrados")
     st.dataframe(df_municipio)
 
 with aba2:
 
-    # GRÁFICO 1
+    # Dataframes por nível
+        
+    dfn_estado = df_tria_nacional[
+        df_tria_nacional["UF"].isin(estado)
+    ]
+
+    # Gráfico 1
     st.subheader("Comparação de Domicílios")
     dados = dfn_estado
     agrupado = (
@@ -668,8 +682,8 @@ with aba2:
     )
     
     st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
-    # GRÁFICO 2
     
+    # Gráfico 2
 
     st.subheader("Porcentagem de cobertura da TRIA")
 
@@ -715,7 +729,8 @@ with aba2:
         use_container_width=True
     )
     st.text("O '*' Representa informções retiradas diretamente do censo nacional IBGE 2022")
-    # GRÁFICO 3
+
+    # Gráfico 3
     
     st.subheader("Comparação de Domicílios")
 
@@ -765,7 +780,7 @@ with aba2:
         use_container_width=True
     )
 
-    # GRÁFICO 4
+    # Gráfico 4
     
 
     st.subheader(
@@ -809,7 +824,7 @@ with aba2:
         use_container_width=True
     )
 
-    # GRÁFICO 5
+    # Gráfico 5
     
     st.subheader("Percentual de domicílios em risco de insegurança alimentar")
 
@@ -863,7 +878,7 @@ with aba2:
         use_container_width=True
     )
 
-    # TABELA
+    # Tabela
 
     st.subheader("Dados filtrados")
     st.dataframe(dfn_estado)
